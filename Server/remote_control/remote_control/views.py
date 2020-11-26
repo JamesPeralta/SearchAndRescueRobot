@@ -15,6 +15,12 @@ from .driver import camera, stream
 from picar import back_wheels, front_wheels
 from django.http import HttpResponse
 import picar
+import requests
+import numpy as np
+from pyzbar.pyzbar import decode
+import cv2
+import base64
+import time
 
 picar.setup()
 db_file = "/home/pi/SunFounder_PiCar-V/remote_control/remote_control/driver/config"
@@ -39,7 +45,28 @@ def run(request):
 	if 'action' in request.GET:
 		action = request.GET['action']
 		# ============== Back wheels =============
-		if action == 'bwready':
+		if action == 'qr':
+                        start = time.monotonic()
+                        x = requests.get('http://192.168.1.67:8080/?action=snapshot')
+                        byte_arr = x.content
+                        img = cv2.imdecode(np.frombuffer(byte_arr, np.uint8), -1)
+                        
+                        found_barcode = False
+                        for barcode in decode(img):
+                            found_barcode = True
+                            my_data = barcode.data.decode('utf-8')
+                            pts = np.array([barcode.polygon], np.int32)
+                            pts = pts.reshape((-1, 1, 2))
+                            pts2 = barcode.rect
+                            cv2.polylines(img, [pts], True, (255, 0, 255), 5)
+                            cv2.putText(img, my_data, (pts2[0], pts2[1]), cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.9, (255, 0, 255), 2)
+                        
+                        retval, buff = cv2.imencode('.jpeg', img)
+                        end = time.monotonic()
+                        #print((end - start) * 1000)
+                        return HttpResponse(buff.tostring(), "image/jpeg", 200)
+		elif action == 'bwready':
 			bw.ready()
 			bw_status = 0
 		elif action == 'forward':
