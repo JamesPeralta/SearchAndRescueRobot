@@ -21,6 +21,7 @@ from pyzbar.pyzbar import decode
 import cv2
 import base64
 import time
+import json
 
 picar.setup()
 db_file = "/home/pi/SunFounder_PiCar-V/remote_control/remote_control/driver/config"
@@ -33,6 +34,7 @@ fw.ready()
  
 SPEED = 60
 bw_status = 0
+json_data = ""
 
 print(stream.start())
 
@@ -40,32 +42,35 @@ def home(request):
 	return render_to_response("base.html")
 
 def run(request):
-	global SPEED, bw_status
+	global SPEED, bw_status, json_data
 	debug = ''
 	if 'action' in request.GET:
 		action = request.GET['action']
 		# ============== Back wheels =============
 		if action == 'qr':
                         start = time.monotonic()
-                        x = requests.get('http://192.168.1.67:8080/?action=snapshot')
+                        x = requests.get('http://192.168.1.75:8080/?action=snapshot')
                         byte_arr = x.content
                         img = cv2.imdecode(np.frombuffer(byte_arr, np.uint8), -1)
                         
-                        found_barcode = False
                         for barcode in decode(img):
-                            found_barcode = True
                             my_data = barcode.data.decode('utf-8')
+                            json_data = dict(json.loads(my_data))
+                            tile_name = list(json_data.keys())[0]
+                            
                             pts = np.array([barcode.polygon], np.int32)
                             pts = pts.reshape((-1, 1, 2))
                             pts2 = barcode.rect
                             cv2.polylines(img, [pts], True, (255, 0, 255), 5)
-                            cv2.putText(img, my_data, (pts2[0], pts2[1]), cv2.FONT_HERSHEY_SIMPLEX,
+                            cv2.putText(img, tile_name, (pts2[0], pts2[1]), cv2.FONT_HERSHEY_SIMPLEX,
                                         0.9, (255, 0, 255), 2)
                         
                         retval, buff = cv2.imencode('.jpeg', img)
                         end = time.monotonic()
                         #print((end - start) * 1000)
                         return HttpResponse(buff.tostring(), "image/jpeg", 200)
+		elif action == 'lasttile':
+                        return HttpResponse(json.dumps(json_data), "application/json", 200)
 		elif action == 'bwready':
 			bw.ready()
 			bw_status = 0
